@@ -9,6 +9,7 @@ import uuid
 from validation import validate_saml
 from metadata import get_certificates, get_federation_metadata, get_wsfed
 from extract import get_user_info
+from ckan.config.routing import SubMapper
 
 
 log = logging.getLogger(__name__)
@@ -68,6 +69,11 @@ class ADFSPlugin(plugins.SingletonPlugin):
             'adfs_redirect_uri', '/adfs/signin/',
             controller='ckanext.adfs.plugin:ADFSRedirectController',
             action='login')
+        # Route user edits to a custom contoller
+        with SubMapper(map, controller='ckanext.adfs.user:ADFSUserController') as m:
+            m.connect('/user/edit', action='edit')
+            m.connect('user_edit', '/user/edit/{id:.*}', action='edit',
+                      ckan_icon='cog')
         return map
 
     def after_map(self, map):
