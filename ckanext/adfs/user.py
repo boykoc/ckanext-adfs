@@ -30,9 +30,9 @@ unflatten = dictization_functions.unflatten
 
 
 class ADFSUserController(UserController):
-    def _save_edit(self, id, context):
+    def _save_edit(self, user_id, context):
         try:
-            if id in (c.userobj.id, c.userobj.name):
+            if user_id in (c.userobj.id, c.userobj.name):
                 current_user = True
             else:
                 current_user = False
@@ -41,7 +41,7 @@ class ADFSUserController(UserController):
             data_dict = logic.clean_dict(unflatten(
                 logic.tuplize_dict(logic.parse_params(request.params))))
             context['message'] = data_dict.get('log_message', '')
-            data_dict['id'] = id
+            data_dict['id'] = user_id
 
             if data_dict.get('password1') and data_dict.get('password2'):
                 identity = {'login': c.user,
@@ -64,7 +64,7 @@ class ADFSUserController(UserController):
                 set_repoze_user(data_dict['name'])
             h.redirect_to(controller='user', action='read', id=user['name'])
         except NotAuthorized:
-            abort(401, _('Unauthorized to edit user %s') % id)
+            abort(401, _('Unauthorized to edit user %s') % user_id)
         except NotFound, e:
             abort(404, _('User not found'))
         except DataError:
@@ -72,8 +72,8 @@ class ADFSUserController(UserController):
         except ValidationError, e:
             errors = e.error_dict
             error_summary = e.error_summary
-            return self.edit(id, data_dict, errors, error_summary)
+            return self.edit(user_id, data_dict, errors, error_summary)
         except UsernamePasswordError:
             errors = {'oldpassword': [_('Password entered was incorrect')]}
             error_summary = {_('Old Password'): _('incorrect password')}
-            return self.edit(id, data_dict, errors, error_summary)
+            return self.edit(user_id, data_dict, errors, error_summary)
