@@ -20,10 +20,11 @@ WTREALM = pylons.config['adfs_wtrealm']
 METADATA = get_federation_metadata(pylons.config['adfs_metadata_url'])
 WSFED_ENDPOINT = get_wsfed(METADATA)
 
-
 if not (WSFED_ENDPOINT):
     raise ValueError('Unable to read WSFED_ENDPOINT values for ADFS plugin.')
 
+def adfs_organization_name():
+    return pylons.config.get('adfs_organization_name', 'our organization')
 
 def adfs_authentication_endpoint():
     url_template = '{}?wa=wsignin1.0&wreq=xml&wtrealm={}'
@@ -51,7 +52,8 @@ class ADFSPlugin(plugins.SingletonPlugin):
 
     def get_helpers(self):
         return dict(is_adfs_user=is_adfs_user,
-                    adfs_authentication_endpoint=adfs_authentication_endpoint)
+                    adfs_authentication_endpoint=adfs_authentication_endpoint,
+                    adfs_organization_name=adfs_organization_name)
 
     def before_map(self, map):
         """

@@ -9,11 +9,10 @@
 {% block primary_content %}
  <section class="module">
     <div class="module-content">
-        <h1 class="page-heading">NHS England Sign In</h1>
-        <p>For employees of NHS England, click the NHS Login button below to
-        sign in with your <em>username@england.nhs.uk</em> account (the one
-        you use for Sharepoint).</p>
-        <p><a class="btn btn-primary" href="{{ h.adfs_authentication_endpoint() }}">NHS Sign In</a></p>
+        <h1 class="page-heading">{{ h.adfs_organization_name() }} Sign In</h1>
+        <p>For {{ h.adfs_organization_name() }} employees, click the Login button below to
+        sign in with your work email account.</p>
+        <p><a class="btn btn-primary" href="{{ h.adfs_authentication_endpoint() }}">{{ h.adfs_organization_name() }} Sign In</a></p>
     </div>
   </section>
   <section class="module">
@@ -33,9 +32,7 @@
       <h2 class="module-heading">{{ _('Need an Account?') }}</h2>
       {% block help_register_inner %}
       <div class="module-content">
-        <p>{% trans %}If you don't work for NHS England, then sign right up,
-        it only takes a minute. (If you <em>do</em> work for NHS England use
-        the NHS Sign In button.){% endtrans %}</p>
+        <p>{% trans org_name=h.adfs_organization_name() %}For <em>non</em> {{ org_name }} users, then sign right up, it only takes a minute.{% endtrans %}</p>
         <p class="action">
         {% block help_register_button %}
           <a class="btn" href="{{ h.url_for(controller='user', action='register') }}">{{ _('Create an Account') }}</a>
@@ -52,7 +49,7 @@
   {% block help_forgotten_inner %}
     <h2 class="module-heading">{{ _('Forgotten your password?') }}</h2>
     <div class="module-content">
-      <p>{% trans %}If you don't work for NHS England, use our password
+      <p>{% trans org_name=h.adfs_organization_name() %}For <em>non</em> {{ org_name }} employees, use our password
       recovery form to reset it.{% endtrans %}</p>
       <p class="action">
         {% block help_forgotten_button %}
