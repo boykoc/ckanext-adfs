@@ -2,6 +2,7 @@
 Plugin for our ADFS
 """
 import logging
+import ckan.lib.base as base
 import ckan.plugins as plugins
 import ckan.plugins.toolkit as toolkit
 import pylons
@@ -158,8 +159,8 @@ class ADFSRedirectController(toolkit.BaseController):
         if user:
             # Existing user
             log.info('Logging in from ADFS with user: {}'.format(username))
-        else:
-            # New user, so create a record for them.
+        elif pylons.config.get('adfs_create_user', False):
+            # New user, so create a record for them if configuration allows.
             log.info('Creating user from ADFS')
             log.info('email: {} firstname: {} surname: {}'.format(email,
                      firstname.encode('utf8'), surname.encode('utf8')))
@@ -171,6 +172,11 @@ class ADFSRedirectController(toolkit.BaseController):
                            'fullname': firstname + ' ' + surname,
                            'password': str(uuid.uuid4()),
                            'email': email})
+        else:
+            log.error('Cannot create new ADFS users. User must already exist due to configuration.')
+            log.error(eggsmell)
+            base.abort(403, ("Sorry, you don't have an account setup. Please contact the site administrators."))
+            raise ValueError('User must already exist. Contact Admin.')
         pylons.session['adfs-user'] = username
         pylons.session['adfs-email'] = email
         pylons.session.save()
