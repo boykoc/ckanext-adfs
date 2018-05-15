@@ -6,6 +6,7 @@ import ckan.logic as logic
 import ckan.lib.navl.dictization_functions as dictization_functions
 import ckan.lib.authenticator as authenticator
 import ckan.plugins as p
+from plugin import is_adfs_user
 
 from ckan.common import _, c, g, request, response
 from ckan.controllers.user import UserController
@@ -43,7 +44,12 @@ class ADFSUserController(UserController):
             context['message'] = data_dict.get('log_message', '')
             data_dict['id'] = user_id
 
-            if data_dict.get('password1') and data_dict.get('password2'):
+            email_changed = data_dict['email'] != c.userobj.email
+
+            # When reseting password or email verify user.
+            # Using data_dict.get() as passwords are not available for ADFS users.
+            if (data_dict.get('password1') and data_dict.get('password2')) \
+                    or email_changed:
                 identity = {'login': c.user,
                             'password': data_dict['old_password']}
                 auth = authenticator.UsernamePasswordAuthenticator()
@@ -54,6 +60,11 @@ class ADFSUserController(UserController):
             # MOAN: Do I really have to do this here?
             if 'activity_streams_email_notifications' not in data_dict:
                 data_dict['activity_streams_email_notifications'] = False
+
+            # If ADFS user block changing  username email.
+            if is_adfs_user():
+                data_dict['name'] = old_username
+                data_dict['email'] = c.userobj.email
 
             user = get_action('user_update')(context, data_dict)
             h.flash_success(_('Profile updated'))
