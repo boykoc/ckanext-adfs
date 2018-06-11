@@ -182,7 +182,6 @@ class ADFSRedirectController(toolkit.BaseController):
             log.error('Cannot create new ADFS users. User must already exist due to configuration.')
             log.error(eggsmell)
             base.abort(403, ("Sorry, you don't have an account setup. Please contact the site administrators."))
-            raise ValueError('User must already exist. Contact Admin.')
         pylons.session['adfs-user'] = username
         pylons.session['adfs-email'] = email
         pylons.session.save()
