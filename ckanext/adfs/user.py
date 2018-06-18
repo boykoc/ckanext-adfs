@@ -32,13 +32,13 @@ unflatten = dictization_functions.unflatten
 
 class ADFSUserController(UserController):
     def _save_edit(self, user_id, context):
-    '''Override CKAN user controller action.
+        '''Override CKAN user controller action.
 
-    ADFS user specific functionality is included.
-    ADFS users should not be able to modify email, 
-    username and password. Password is not rendered
-    in template.
-    '''
+        ADFS user specific functionality is included.
+        ADFS users should not be able to modify email, 
+        username and password. Password is not rendered
+        in template.
+        '''
         try:
             if user_id in (c.userobj.id, c.userobj.name):
                 current_user = True
