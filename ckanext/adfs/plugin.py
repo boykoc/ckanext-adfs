@@ -95,6 +95,11 @@ class ADFSPlugin(plugins.SingletonPlugin):
         user = session.get('adfs-user')
         if user:
             toolkit.c.user = user
+        else:
+            # Set to none if no user as per CKAN issue #4247.
+            # identify_user() also normally tries to set to None
+            # but not working as of CKAN 2.8.0.
+            toolkit.c.user = None
 
     def login(self):
         """
