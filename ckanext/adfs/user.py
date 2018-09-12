@@ -8,7 +8,8 @@ import ckan.lib.authenticator as authenticator
 import ckan.plugins as p
 from plugin import is_adfs_user
 
-from ckan.common import _, c, g, request, response
+import ckan.plugins.toolkit as toolkit
+from ckan.common import _, response
 from ckan.controllers.user import UserController
 
 try:
@@ -40,28 +41,28 @@ class ADFSUserController(UserController):
         in template.
         '''
         try:
-            if user_id in (c.userobj.id, c.userobj.name):
+            if user_id in (toolkit.c.userobj.id, toolkit.c.userobj.name):
                 current_user = True
             else:
                 current_user = False
-            old_username = c.userobj.name
+            old_username = toolkit.c.userobj.name
 
             data_dict = logic.clean_dict(unflatten(
-                logic.tuplize_dict(logic.parse_params(request.params))))
+                logic.tuplize_dict(logic.parse_params(toolkit.request.params))))
             context['message'] = data_dict.get('log_message', '')
             data_dict['id'] = user_id
 
-            email_changed = data_dict['email'] != c.userobj.email
+            email_changed = data_dict['email'] != toolkit.c.userobj.email
 
             # When reseting password or email verify user.
             # Using data_dict.get() as passwords are not available for ADFS users.
             if (data_dict.get('password1') and data_dict.get('password2')) \
                     or email_changed:
-                identity = {'login': c.user,
+                identity = {'login': toolkit.c.user,
                             'password': data_dict['old_password']}
                 auth = authenticator.UsernamePasswordAuthenticator()
 
-                if auth.authenticate(request.environ, identity) != c.user:
+                if auth.authenticate(toolkit.request.environ, identity) != toolkit.c.user:
                     raise UsernamePasswordError
 
             # MOAN: Do I really have to do this here?
@@ -71,7 +72,7 @@ class ADFSUserController(UserController):
             # If ADFS user block changing  username email.
             if is_adfs_user():
                 data_dict['name'] = old_username
-                data_dict['email'] = c.userobj.email
+                data_dict['email'] = toolkit.c.userobj.email
 
             user = get_action('user_update')(context, data_dict)
             h.flash_success(_('Profile updated'))
