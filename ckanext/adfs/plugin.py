@@ -130,9 +130,13 @@ class ADFSPlugin(plugins.SingletonPlugin):
 def _get_user(name):
     """
     Return the CKAN user with the given user name, or None.
+    Check state, state: deleted can still login but gets a blank page because
+    CKAN is handling authorization later as well.
     """
     try:
-        return toolkit.get_action('user_show')(data_dict = {'id': name})
+        user = toolkit.get_action('user_show')(data_dict = {'id': name})
+        if user['state'] == 'active':
+            return user
     except toolkit.ObjectNotFound:
         return None
 
