@@ -5,12 +5,13 @@ import logging
 import ckan.lib.base as base
 import ckan.plugins as plugins
 import ckan.plugins.toolkit as toolkit
-import pylons
 import uuid
 from validation import validate_saml
 from metadata import get_certificates, get_federation_metadata, get_wsfed
 from extract import get_user_info
 from ckan.config.routing import SubMapper
+
+from ckan.common import session
 
 
 log = logging.getLogger(__name__)
@@ -18,15 +19,15 @@ log = logging.getLogger(__name__)
 
 # Some awful XML munging.
 WSFED_ENDPOINT = ''
-WTREALM = pylons.config['adfs_wtrealm']
-METADATA = get_federation_metadata(pylons.config['adfs_metadata_url'])
+WTREALM = toolkit.config['adfs_wtrealm']
+METADATA = get_federation_metadata(toolkit.config['adfs_metadata_url'])
 WSFED_ENDPOINT = get_wsfed(METADATA)
 
 if not (WSFED_ENDPOINT):
     raise ValueError('Unable to read WSFED_ENDPOINT values for ADFS plugin.')
 
 def adfs_organization_name():
-    return pylons.config.get('adfs_organization_name', 'our organization')
+    return toolkit.config.get('adfs_organization_name', 'our organization')
 
 def adfs_authentication_endpoint():
     url_template = '{}?wa=wsignin1.0&wreq=xml&wtrealm={}'
@@ -34,7 +35,7 @@ def adfs_authentication_endpoint():
 
 
 def is_adfs_user():
-    return pylons.session.get('adfs-user')
+    return session.get('adfs-user')
 
 
 class ADFSPlugin(plugins.SingletonPlugin):
@@ -91,9 +92,14 @@ class ADFSPlugin(plugins.SingletonPlugin):
         """
         Called to identify the user.
         """
-        user = pylons.session.get('adfs-user')
+        user = session.get('adfs-user')
         if user:
             toolkit.c.user = user
+        else:
+            # Set to none if no user as per CKAN issue #4247.
+            # identify_user() also normally tries to set to None
+            # but not working as of CKAN 2.8.0.
+            toolkit.c.user = None
 
     def login(self):
         """
@@ -105,12 +111,12 @@ class ADFSPlugin(plugins.SingletonPlugin):
         """
         Called at logout.
         """
-        keys_to_delete = [key for key in pylons.session
+        keys_to_delete = [key for key in session
                           if key.startswith('adfs')]
         if keys_to_delete:
             for key in keys_to_delete:
-                del pylons.session[key]
-            pylons.session.save()
+                del session[key]
+            session.save()
 
 
     def abort(self, status_code, detail, headers, comment):
@@ -144,13 +150,13 @@ class ADFSRedirectController(toolkit.BaseController):
         """
         Handle eggsmell request from the ADFS redirect_uri.
         """
-        eggsmell = pylons.request.POST['wresult']
+        eggsmell = toolkit.request.POST['wresult']
         # We grab the metadata for each login because due to opaque
         # bureaucracy and lack of communication the certificates can be
         # changed. We looked into this and took made the call based upon lack
         # of user problems and tech being under our control vs the (small
         # amount of) latency from a network call per login attempt.
-        metadata = get_federation_metadata(pylons.config['adfs_metadata_url'])
+        metadata = get_federation_metadata(toolkit.config['adfs_metadata_url'])
         x509_certificates = get_certificates(metadata)
         if not validate_saml(eggsmell, x509_certificates):
             raise ValueError('Invalid signature')
@@ -165,7 +171,7 @@ class ADFSRedirectController(toolkit.BaseController):
         if user:
             # Existing user
             log.info('Logging in from ADFS with user: {}'.format(username))
-        elif pylons.config.get('adfs_create_user', False):
+        elif toolkit.config.get('adfs_create_user', False):
             # New user, so create a record for them if configuration allows.
             log.info('Creating user from ADFS')
             log.info('email: {} firstname: {} surname: {}'.format(email,
@@ -182,8 +188,8 @@ class ADFSRedirectController(toolkit.BaseController):
             log.error('Cannot create new ADFS users. User must already exist due to configuration.')
             log.error(eggsmell)
             base.abort(403, ("Sorry, you don't have an account setup. Please contact the site administrators."))
-        pylons.session['adfs-user'] = username
-        pylons.session['adfs-email'] = email
-        pylons.session.save()
+        session['adfs-user'] = username
+        session['adfs-email'] = email
+        session.save()
         toolkit.redirect_to(controller='user', action='dashboard', id=email)
         return
