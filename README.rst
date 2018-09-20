@@ -55,7 +55,7 @@ do::
     cd ckanext-adfs
     git checkout temp-prod # Note: this is for my version of this repo.
     python setup.py develop
-    pip install requirements.txt
+    pip install -r requirements.txt
 
 
 ------------
