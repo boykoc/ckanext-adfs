@@ -53,14 +53,16 @@ On the machine hosting your instance of CKAN:
 Ensure all the requirements are installed (see `requirements.txt` for further
 details).
 
-In your CKAN's settings.ini file you need to provide two settings in the
-[app:main] section:
+In your CKAN's production.ini / development.ini file you need to provide two settings in the
+`[app:main]` section:
 
 * adfs_wtrealm - the `APP ID URI` setting found in the "Get Started" / "Enable Users to Sign On" section on the "home" page for the application integrating with ADFS on the Azure website. This is usually the same as the APP ID URI you define in the settings for the application.
 
 * adfs_metadata_url - a URL pointing to a remote file called `FederationMetadata.xml` containing the ADFS_NAMESPACE and adfs_x509 related values. This URL is in the "Federation Metadata Document URL" value in the "Enable Users to Sign On" section of the Azure website (at current time of writing).
 
 * adfs_create_user = Optional Boolean, defaults to False.
+
+* adfs_contact_email = Optional String (e.g. opendata@organization.com), defaults to 'your administrator'
 
 *A WORD OF WARNING* Microsoft appears to change its UI in the Azure website
 quite often so you may need to poke around to find the correct settings. It has

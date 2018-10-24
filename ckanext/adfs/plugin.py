@@ -191,7 +191,8 @@ class ADFSRedirectController(toolkit.BaseController):
         else:
             log.error('Cannot create new ADFS users. User must already exist due to configuration.')
             log.error(eggsmell)
-            toolkit.abort(403, "Oops, you don't have access. Contact your open government lead. If you are an open government lead or already have an account, please email opengovernment@ontario.ca.")
+            contact_email = toolkit.config.get('adfs_contact_email', 'your administrator')
+            toolkit.abort(403, "Oops, you don't have access. Please email %s for access." % (contact_email))
         
         session['adfs-user'] = username
         session['adfs-email'] = email
