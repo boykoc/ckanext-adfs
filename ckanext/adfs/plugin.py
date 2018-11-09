@@ -26,8 +26,10 @@ WSFED_ENDPOINT = get_wsfed(METADATA)
 if not (WSFED_ENDPOINT):
     raise ValueError('Unable to read WSFED_ENDPOINT values for ADFS plugin.')
 
+
 def adfs_organization_name():
     return toolkit.config.get('adfs_organization_name', 'our organization')
+
 
 def adfs_authentication_endpoint():
     url_template = '{}?wa=wsignin1.0&wreq=xml&wtrealm={}'
@@ -38,24 +40,14 @@ def is_adfs_user():
     return session.get('adfs-user')
 
 
-"""
-A custom home controller for receiving ADFS authorization responses.
-"""
-
 def login():
-    came_from = request.params.get('came_from', '')
-    log.error('adfs login came_from: ' + str(came_from))
+    """
+    A custom home controller for receiving ADFS authorization responses.
+    """
+    
     """
     Handle eggsmell request from the ADFS redirect_uri.
     """
-    log.error('login 1')
-    came_from = request.params.get('wresult', 'EMPTY')
-    log.error(str(came_from))
-    log.error(request.params.__dict__)
-    log.error(toolkit.request.params.__dict__)
-    log.error(request.form.get('wresult', 'EMPTY'))
-    log.error(request.__dict__)
-    # log.error(toolkit.request.POST['wresult'])
     try:
         eggsmell = toolkit.request.form['wresult']
     except Exception as ex:
@@ -63,22 +55,18 @@ def login():
         log.error(ex)
         toolkit.h.flash_error(u'Not able to successfully authenticate.')
         return toolkit.redirect_to(u'/user/login')
-    log.error('login 2')
-    #log.error(eggsmell)
+
     # We grab the metadata for each login because due to opaque
     # bureaucracy and lack of communication the certificates can be
     # changed. We looked into this and took made the call based upon lack
     # of user problems and tech being under our control vs the (small
     # amount of) latency from a network call per login attempt.
     metadata = get_federation_metadata(toolkit.config['adfs_metadata_url'])
-    log.error('login 3')
     x509_certificates = get_certificates(metadata)
-    log.error('login 4')
     if not validate_saml(eggsmell, x509_certificates):
         raise ValueError('Invalid signature')
     username, email, firstname, surname = get_user_info(eggsmell)
 
-    log.error('login 5')
     if not email:
         log.error('Unable to login with ADFS')
         log.error(eggsmell)
@@ -106,12 +94,20 @@ def login():
         log.error(eggsmell)
         contact_email = toolkit.config.get('adfs_contact_email', 'your administrator')
         toolkit.abort(403, "Oops, you don't have access. Please email %s for access." % (contact_email))
+    
+    # Log the user in programatically.
+    # Reference: ckan/views/user.py
+    # By this point we either have a user or created one and they're good to login.
+    resp = toolkit.h.redirect_to(u'user.logged_in')
 
-    session[u'adfs-user'] = username
-    session[u'adfs-email'] = email
-    session.save()
+    '''Set the repoze.who cookie to match a given user_id'''
+    if u'repoze.who.plugins' in request.environ:
+        rememberer = request.environ[u'repoze.who.plugins'][u'friendlyform']
+        identity = {u'repoze.who.userid': username}
+        resp.headers.extend(rememberer.remember(request.environ, identity))
 
-    return toolkit.redirect_to(u'user.logged_in') # helps set user dict? then redirects to dashboard.
+    return resp
+
 
 class ADFSPlugin(plugins.SingletonPlugin):
     """
@@ -119,7 +115,6 @@ class ADFSPlugin(plugins.SingletonPlugin):
     """
     plugins.implements(plugins.IConfigurer)
     plugins.implements(plugins.ITemplateHelpers)
-    #plugins.implements(plugins.IRoutes)
     plugins.implements(plugins.IBlueprint)
     plugins.implements(plugins.IAuthenticator)
 
@@ -134,26 +129,6 @@ class ADFSPlugin(plugins.SingletonPlugin):
                     adfs_authentication_endpoint=adfs_authentication_endpoint,
                     adfs_organization_name=adfs_organization_name)
 
-    # def before_map(self, map):
-    #     """
-    #     Called before the routes map is generated. ``before_map`` is before any
-    #     other mappings are created so can override all other mappings.
-
-    #     :param map: Routes map object
-    #     :returns: Modified version of the map object
-    #     """
-    #     # Route requests for our WAAD redirect URI to a custom controller.
-    #     map.connect(
-    #         'adfs_redirect_uri', '/adfs/signin/',
-    #         controller=u'ckanext.adfs.plugin:ADFSRedirectController',
-    #         action=u'login')
-    #     # Route user edits to a custom contoller
-    #     # with SubMapper(map, controller='ckanext.adfs.user:ADFSUserController') as m:
-    #     #     m.connect('/user/edit', action='edit')
-    #     #     m.connect('user_edit', '/user/edit/{id:.*}', action='edit',
-    #     #               ckan_icon='cog')
-    #     return map
-
     def get_blueprint(self):
         blueprint = Blueprint('adfs_redirect_uri', self.__module__)
         rules = [
@@ -164,35 +139,15 @@ class ADFSPlugin(plugins.SingletonPlugin):
 
         return blueprint
 
-    # def after_map(self, map):
-    #     """
-    #     Called after routes map is set up. ``after_map`` can be used to
-    #     add fall-back handlers.
-
-    #     :param map: Routes map object
-    #     :returns: Modified version of the map object
-    #     """
-    #     return map
-
     def identify(self):
         """
         Called to identify the user.
+        TODO: Next release of CKAN remove this and set to `pass`.
+              "Nothing to do here, let CKAN handle identifying the user.
+               If ADFS, we login above and then CKAN will identify user."
         """
-        log.error('!!!!!!!!!######s#######!!!!!!!!!!!')
-        log.error(response.__dict__)
-        log.error(request.cookies)
-        log.error(session.__dict__)
-        log.error(session.items())
-        log.error(toolkit.c.__dict__)
-        log.error('')
-        log.error('')
-        log.error('')
-        log.error(request.__dict__)
-        
-        user = session.get('adfs-user')
-        if user:
-            toolkit.c.user = user
-        else:
+        # Must set user to prevent `AttributeError: '_Globals' object has no attribute 'user'`
+        if not getattr(toolkit.c, u'user', None):
             # Set to none if no user as per CKAN issue #4247.
             # identify_user() also normally tries to set to None
             # but not working as of CKAN 2.8.0.
@@ -201,53 +156,23 @@ class ADFSPlugin(plugins.SingletonPlugin):
     def login(self):
         """
         Called at login.
+        Nothing to do here. If default CKAN login, let CKAN do it's thing.
+        If ADFS login, user is logged in above and this isn't called as we 
+        by-pass the login_handler setup by CKAN and repoze.who.
         """
         pass
 
     def logout(self):
         """
         Called at logout.
+        Nothing to do here, let repoze.who / CKAN handle logout.
         """
-        log.error('\n\n')
-        log.error(session.__dict__)
-        log.error('LOGOUT CALLED - plugin.py')
-        if u'adfs-user' in session:
-            del session[u'adfs-user']
-            session.save()
-        if u'adfs-email' in session:
-            del session[u'adfs-email']
-            session.save()
-        if u'id' in session:
-            del session[u'id']
-            session.save()
-        log.error('\n\n')
-        log.error(session.__dict__)
-
-
-        # log.error("1111111111111111111")
-        # log.error(session.__dict__)
-        # keys_to_delete = [key for key in session
-        #                   if key.startswith(u'adfs')]
-        # if keys_to_delete:
-        #     for key in keys_to_delete:
-        #         del session[key]
-        #     session.save()
-        # toolkit.c.user = None
-        # toolkit.c.userobj = None
-        # toolkit.c.user_dict = None
-        # toolkit.c.author = None
-        # log.error(toolkit.c.__dict__)
-        # log.error("222222222222222222")
-        # log.error(session.__dict__)
-        # TODO: check if clearing author helps
-        # TODO: check what ckan.views.user prints session wise
-        # when using the default auth.
-
+        pass
 
     def abort(self, status_code, detail, headers, comment):
         """
         Called on abort.  This allows aborts due to authorization issues
-        to be overriden.
+        to be overridden.
         """
         return (status_code, detail, headers, comment)
 
