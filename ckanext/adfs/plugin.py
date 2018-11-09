@@ -178,6 +178,17 @@ class ADFSPlugin(plugins.SingletonPlugin):
         """
         Called to identify the user.
         """
+        log.error('!!!!!!!!!######s#######!!!!!!!!!!!')
+        log.error(response.__dict__)
+        log.error(request.cookies)
+        log.error(session.__dict__)
+        log.error(session.items())
+        log.error(toolkit.c.__dict__)
+        log.error('')
+        log.error('')
+        log.error('')
+        log.error(request.__dict__)
+        
         user = session.get('adfs-user')
         if user:
             toolkit.c.user = user
@@ -197,12 +208,40 @@ class ADFSPlugin(plugins.SingletonPlugin):
         """
         Called at logout.
         """
-        keys_to_delete = [key for key in session
-                          if key.startswith('adfs')]
-        if keys_to_delete:
-            for key in keys_to_delete:
-                del session[key]
+        log.error('\n\n')
+        log.error(session.__dict__)
+        log.error('LOGOUT CALLED - plugin.py')
+        if u'adfs-user' in session:
+            del session[u'adfs-user']
             session.save()
+        if u'adfs-email' in session:
+            del session[u'adfs-email']
+            session.save()
+        if u'id' in session:
+            del session[u'id']
+            session.save()
+        log.error('\n\n')
+        log.error(session.__dict__)
+
+
+        # log.error("1111111111111111111")
+        # log.error(session.__dict__)
+        # keys_to_delete = [key for key in session
+        #                   if key.startswith(u'adfs')]
+        # if keys_to_delete:
+        #     for key in keys_to_delete:
+        #         del session[key]
+        #     session.save()
+        # toolkit.c.user = None
+        # toolkit.c.userobj = None
+        # toolkit.c.user_dict = None
+        # toolkit.c.author = None
+        # log.error(toolkit.c.__dict__)
+        # log.error("222222222222222222")
+        # log.error(session.__dict__)
+        # TODO: check if clearing author helps
+        # TODO: check what ckan.views.user prints session wise
+        # when using the default auth.
 
 
     def abort(self, status_code, detail, headers, comment):
