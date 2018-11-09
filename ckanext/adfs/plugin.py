@@ -11,8 +11,8 @@ from metadata import get_certificates, get_federation_metadata, get_wsfed
 from extract import get_user_info
 from ckan.config.routing import SubMapper
 
-from ckan.common import session
-
+from ckan.common import session, request, response
+from flask import Blueprint
 
 log = logging.getLogger(__name__)
 
@@ -38,13 +38,89 @@ def is_adfs_user():
     return session.get('adfs-user')
 
 
+"""
+A custom home controller for receiving ADFS authorization responses.
+"""
+
+def login():
+    came_from = request.params.get('came_from', '')
+    log.error('adfs login came_from: ' + str(came_from))
+    """
+    Handle eggsmell request from the ADFS redirect_uri.
+    """
+    log.error('login 1')
+    came_from = request.params.get('wresult', 'EMPTY')
+    log.error(str(came_from))
+    log.error(request.params.__dict__)
+    log.error(toolkit.request.params.__dict__)
+    log.error(request.form.get('wresult', 'EMPTY'))
+    log.error(request.__dict__)
+    # log.error(toolkit.request.POST['wresult'])
+    try:
+        eggsmell = toolkit.request.form['wresult']
+    except Exception as ex:
+        log.error('Missing eggsmell. `wresult` param does not exist.')
+        log.error(ex)
+        toolkit.h.flash_error(u'Not able to successfully authenticate.')
+        return toolkit.redirect_to(u'/user/login')
+    log.error('login 2')
+    #log.error(eggsmell)
+    # We grab the metadata for each login because due to opaque
+    # bureaucracy and lack of communication the certificates can be
+    # changed. We looked into this and took made the call based upon lack
+    # of user problems and tech being under our control vs the (small
+    # amount of) latency from a network call per login attempt.
+    metadata = get_federation_metadata(toolkit.config['adfs_metadata_url'])
+    log.error('login 3')
+    x509_certificates = get_certificates(metadata)
+    log.error('login 4')
+    if not validate_saml(eggsmell, x509_certificates):
+        raise ValueError('Invalid signature')
+    username, email, firstname, surname = get_user_info(eggsmell)
+
+    log.error('login 5')
+    if not email:
+        log.error('Unable to login with ADFS')
+        log.error(eggsmell)
+        raise ValueError('No email returned with ADFS')
+
+    user = _get_user(username)
+    if user:
+        # Existing user
+        log.info('Logging in from ADFS with user: {}'.format(username))
+    elif toolkit.config.get('adfs_create_user', False):
+        # New user, so create a record for them if configuration allows.
+        log.info('Creating user from ADFS')
+        log.info('email: {} firstname: {} surname: {}'.format(email,
+                 firstname.encode('utf8'), surname.encode('utf8')))
+        log.info('Generated username: {}'.format(username))
+        # TODO: Add the new user to the NHSEngland group? Check this!
+        user = toolkit.get_action('user_create')(
+            context={'ignore_auth': True},
+            data_dict={'name': username,
+                       'fullname': firstname + ' ' + surname,
+                       'password': str(uuid.uuid4()),
+                       'email': email})
+    else:
+        log.error('Cannot create new ADFS users. User must already exist due to configuration.')
+        log.error(eggsmell)
+        contact_email = toolkit.config.get('adfs_contact_email', 'your administrator')
+        toolkit.abort(403, "Oops, you don't have access. Please email %s for access." % (contact_email))
+
+    session[u'adfs-user'] = username
+    session[u'adfs-email'] = email
+    session.save()
+
+    return toolkit.redirect_to(u'user.logged_in') # helps set user dict? then redirects to dashboard.
+
 class ADFSPlugin(plugins.SingletonPlugin):
     """
     Log us in via the ADFSes
     """
     plugins.implements(plugins.IConfigurer)
     plugins.implements(plugins.ITemplateHelpers)
-    plugins.implements(plugins.IRoutes)
+    #plugins.implements(plugins.IRoutes)
+    plugins.implements(plugins.IBlueprint)
     plugins.implements(plugins.IAuthenticator)
 
     def update_config(self, config):
@@ -58,35 +134,45 @@ class ADFSPlugin(plugins.SingletonPlugin):
                     adfs_authentication_endpoint=adfs_authentication_endpoint,
                     adfs_organization_name=adfs_organization_name)
 
-    def before_map(self, map):
-        """
-        Called before the routes map is generated. ``before_map`` is before any
-        other mappings are created so can override all other mappings.
+    # def before_map(self, map):
+    #     """
+    #     Called before the routes map is generated. ``before_map`` is before any
+    #     other mappings are created so can override all other mappings.
 
-        :param map: Routes map object
-        :returns: Modified version of the map object
-        """
-        # Route requests for our WAAD redirect URI to a custom controller.
-        map.connect(
-            'adfs_redirect_uri', '/adfs/signin/',
-            controller='ckanext.adfs.plugin:ADFSRedirectController',
-            action='login')
-        # Route user edits to a custom contoller
-        with SubMapper(map, controller='ckanext.adfs.user:ADFSUserController') as m:
-            m.connect('/user/edit', action='edit')
-            m.connect('user_edit', '/user/edit/{id:.*}', action='edit',
-                      ckan_icon='cog')
-        return map
+    #     :param map: Routes map object
+    #     :returns: Modified version of the map object
+    #     """
+    #     # Route requests for our WAAD redirect URI to a custom controller.
+    #     map.connect(
+    #         'adfs_redirect_uri', '/adfs/signin/',
+    #         controller=u'ckanext.adfs.plugin:ADFSRedirectController',
+    #         action=u'login')
+    #     # Route user edits to a custom contoller
+    #     # with SubMapper(map, controller='ckanext.adfs.user:ADFSUserController') as m:
+    #     #     m.connect('/user/edit', action='edit')
+    #     #     m.connect('user_edit', '/user/edit/{id:.*}', action='edit',
+    #     #               ckan_icon='cog')
+    #     return map
 
-    def after_map(self, map):
-        """
-        Called after routes map is set up. ``after_map`` can be used to
-        add fall-back handlers.
+    def get_blueprint(self):
+        blueprint = Blueprint('adfs_redirect_uri', self.__module__)
+        rules = [
+            ('/adfs/signin/', 'login', login)
+        ]
+        for rule in rules:
+            blueprint.add_url_rule(*rule, methods=['POST'])
 
-        :param map: Routes map object
-        :returns: Modified version of the map object
-        """
-        return map
+        return blueprint
+
+    # def after_map(self, map):
+    #     """
+    #     Called after routes map is set up. ``after_map`` can be used to
+    #     add fall-back handlers.
+
+    #     :param map: Routes map object
+    #     :returns: Modified version of the map object
+    #     """
+    #     return map
 
     def identify(self):
         """
@@ -139,57 +225,3 @@ def _get_user(name):
 
 class FileNotFoundException(Exception):
     pass
-
-
-class ADFSRedirectController(toolkit.BaseController):
-    """
-    A custom home controller for receiving ADFS authorization responses.
-    """
-
-    def login(self):
-        """
-        Handle eggsmell request from the ADFS redirect_uri.
-        """
-        eggsmell = toolkit.request.POST['wresult']
-        # We grab the metadata for each login because due to opaque
-        # bureaucracy and lack of communication the certificates can be
-        # changed. We looked into this and took made the call based upon lack
-        # of user problems and tech being under our control vs the (small
-        # amount of) latency from a network call per login attempt.
-        metadata = get_federation_metadata(toolkit.config['adfs_metadata_url'])
-        x509_certificates = get_certificates(metadata)
-        if not validate_saml(eggsmell, x509_certificates):
-            raise ValueError('Invalid signature')
-        username, email, firstname, surname = get_user_info(eggsmell)
-
-        if not email:
-            log.error('Unable to login with ADFS')
-            log.error(eggsmell)
-            raise ValueError('No email returned with ADFS')
-
-        user = _get_user(username)
-        if user:
-            # Existing user
-            log.info('Logging in from ADFS with user: {}'.format(username))
-        elif toolkit.config.get('adfs_create_user', False):
-            # New user, so create a record for them if configuration allows.
-            log.info('Creating user from ADFS')
-            log.info('email: {} firstname: {} surname: {}'.format(email,
-                     firstname.encode('utf8'), surname.encode('utf8')))
-            log.info('Generated username: {}'.format(username))
-            # TODO: Add the new user to the NHSEngland group? Check this!
-            user = toolkit.get_action('user_create')(
-                context={'ignore_auth': True},
-                data_dict={'name': username,
-                           'fullname': firstname + ' ' + surname,
-                           'password': str(uuid.uuid4()),
-                           'email': email})
-        else:
-            log.error('Cannot create new ADFS users. User must already exist due to configuration.')
-            log.error(eggsmell)
-            base.abort(403, ("Sorry, you don't have an account setup. Please contact the site administrators."))
-        session['adfs-user'] = username
-        session['adfs-email'] = email
-        session.save()
-        toolkit.redirect_to(controller='user', action='dashboard', id=email)
-        return
