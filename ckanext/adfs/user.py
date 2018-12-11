@@ -54,6 +54,11 @@ class ADFSUserController(UserController):
 
             email_changed = data_dict['email'] != toolkit.c.userobj.email
 
+            if is_adfs_user() and not current_user:
+                # We don't use passwords for adfs users. ADFS sysadmins
+                # would always flag this and error out next.
+                email_changed = False
+
             # When reseting password or email verify user.
             # Using data_dict.get() as passwords are not available for ADFS users.
             if (data_dict.get('password1') and data_dict.get('password2')) \
@@ -70,9 +75,11 @@ class ADFSUserController(UserController):
                 data_dict['activity_streams_email_notifications'] = False
 
             # If ADFS user block changing  username email.
+            # Get original user info instead of session, session might be admin.
             if is_adfs_user():
-                data_dict['name'] = old_username
-                data_dict['email'] = toolkit.c.userobj.email
+                old_data = get_action('user_show')(context, {'id': user_id})
+                data_dict['name'] = old_data['name']
+                data_dict['email'] = old_data['email']
 
             user = get_action('user_update')(context, data_dict)
             h.flash_success(_('Profile updated'))
