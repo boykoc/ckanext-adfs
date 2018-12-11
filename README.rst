@@ -2,7 +2,10 @@
 ckanext-adfs
 ============
 
-**As of 2018-09-19 this extension has been tested against CKAN 2.6.6, 2.7.4 and 2.8.1. However YMMV.**
+**As of 2018-12-11 this extension has been tested against CKAN 2.8.1. However
+YMMV.**
+**The changes made to make it compatible for 2.8.1 are breaking changes for
+earlier versions.**
 
 A CKAN extension for validating users against Microsoft's Active Directory
 Federated Services (ADFS) Single Sign On (SSO) API.
