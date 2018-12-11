@@ -137,6 +137,8 @@ def _get_user(name):
         user = toolkit.get_action('user_show')(data_dict = {'id': name})
         if user['state'] == 'active':
             return user
+        else:
+            raise toolkit.ObjectNotFound
     except toolkit.ObjectNotFound:
         return None
 
